@@ -113,6 +113,7 @@ import {
   worktreeCwdsForRepo,
   type WorktreeParentRef,
   normalizeFsPath,
+  pathIsInside,
   pathsEqual,
   sanitizeWorktreeLabel,
   worktreeDisplayName,
@@ -152,6 +153,16 @@ const INSTALL_ID_KEY = "grok.installId";
  *  file — the #67 complaint. Persisted (not per-session) because a preference
  *  this deliberate should survive a reload, exactly like the setting would. */
 const IMPLICIT_CHIP_HIDDEN_KEY = "grok.implicitChipHidden";
+/** globalState key for the last workspace folder this extension actually ran in.
+ *  History is scoped to the window's cwd, and grok keys its on-disk session
+ *  catalog on that same string — so when VS Code opens with NO folder (a plain
+ *  `code` launch, or the window restored empty), the old `process.cwd()` fallback
+ *  pointed history at the VS Code installation directory. Every previous session
+ *  vanished from the list ("history clears when I exit"), and new sessions were
+ *  written into the install dir under a cwd that changes with how VS Code was
+ *  launched — so they scattered too. Remembering the last real root keeps a
+ *  folder-less window on the project the user was last working in. */
+const LAST_WORKSPACE_ROOT_KEY = "grok.lastWorkspaceRoot";
 
 // History pagination: rows fetched per "page" (initial open + each load-more / search page).
 const SESSION_PAGE_SIZE = 100;
@@ -1474,10 +1485,70 @@ See design doc for the full state machine diagram.`;
     await this.handleSend(cmd, true);
   }
 
-  /** Workspace folder root (the main checkout for worktree ops). */
+  /** Workspace folder root (the main checkout for worktree ops), and the cwd the
+   *  local history list + New Session are scoped to.
+   *
+   *  With a folder open this is that folder, and we record it. With NO folder open
+   *  we return the last folder we recorded (when it still exists) instead of
+   *  `process.cwd()`: the extension host's cwd is wherever VS Code was launched
+   *  from — its install directory for a Start-menu launch — which is both a
+   *  history scope the user never chose and a directory we do not want grok
+   *  writing into. `process.cwd()` remains the last resort for a first run that
+   *  has never seen a folder. */
   private workspaceRoot(): string {
-    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (folder) {
+      if (this.rememberedRoot !== folder) {
+        this.rememberedRoot = folder;
+        void this.context.globalState.update(LAST_WORKSPACE_ROOT_KEY, folder);
+      }
+      return folder;
+    }
+    if (this.rememberedRoot === undefined) this.rememberedRoot = this.resolveRootWithoutFolder();
+    return this.rememberedRoot || process.cwd();
   }
+
+  /** The folder-less fallback root: the last folder we recorded, else the most
+   *  recently used project in grok's own session catalog. The catalog seed covers
+   *  the first folder-less window after an upgrade — there is nothing recorded yet,
+   *  and without it the user would have to open a folder once before their history
+   *  came back. Returns "" when neither is available, leaving `process.cwd()`. */
+  private resolveRootWithoutFolder(): string {
+    const usable = (p: string | undefined): boolean => {
+      try {
+        return !!p && defaultFs.statSync(p).isDirectory();
+      } catch {
+        return false;
+      }
+    };
+    const stored = this.context.globalState.get<string>(LAST_WORKSPACE_ROOT_KEY);
+    if (usable(stored)) return stored!;
+    // discoverRepos already drops temp roots, grok-managed worktrees, and any
+    // checkout that no longer exists, and sorts newest-activity first. It cannot
+    // know about the one root we must never seed from: the VS Code installation
+    // directory. Earlier folder-less windows wrote their sessions there (that IS
+    // the bug), so it is both a real catalog and usually the most recent one —
+    // seeding from it would just re-enter the state we are escaping.
+    const notAProject = (cwd: string) =>
+      pathsEqual(cwd, process.cwd()) || pathIsInside(vscode.env.appRoot, cwd);
+    const newest = discoverRepos({
+      fs: defaultFs,
+      grokHome: resolveGrokHome(process.env),
+      pins: this.context.globalState.get<RepoPins>(REPO_PINS_KEY, {}),
+      tmpDir: os.tmpdir(),
+      log: (m) => this.output.appendLine(m),
+    }).find((r) => r.available && !notAProject(r.cwd));
+    if (!newest) return "";
+    this.output.appendLine(
+      `[sessions] no workspace folder open — scoping history to the most recent project: ${newest.cwd}`,
+    );
+    return newest.cwd;
+  }
+
+  /** Cache for {@link workspaceRoot}'s folder-less fallback: `undefined` = not yet
+   *  resolved, `""` = resolved to "nothing usable stored". Keeps the existence
+   *  check off a path that runs on every history refresh. */
+  private rememberedRoot?: string;
 
   /** Effective cwd for a session (worktree path or workspace root). */
   private sessionCwd(session: Session = this.focused): string {
@@ -3367,7 +3438,7 @@ See design doc for the full state machine diagram.`;
         break;
       }
       case "openProjectConfig": {
-        const cwd2 = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+        const cwd2 = this.workspaceRoot();
         const projCfg = path.join(cwd2, ".grok", "config.toml");
         if (!fs.existsSync(projCfg)) {
           fs.mkdirSync(path.dirname(projCfg), { recursive: true });
@@ -4200,7 +4271,7 @@ See design doc for the full state machine diagram.`;
   }
 
   private postVoiceConfigured(): void {
-    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    const cwd = this.workspaceRoot();
     const cfg = vscode.workspace.getConfiguration("grok");
     this.post({
       type: "voiceConfigured",
@@ -4227,7 +4298,7 @@ See design doc for the full state machine diagram.`;
    *  reach the mic). The webview has already flipped its button to "listening";
    *  on any setup failure we send `voiceError` to reset it. */
   private async handleVoiceStart(): Promise<void> {
-    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    const cwd = this.workspaceRoot();
     const key = this.resolveVoiceApiKey(cwd);
     if (!key) {
       void this.promptVoiceKeySetup();
@@ -4298,7 +4369,7 @@ See design doc for the full state machine diagram.`;
     // reconnect picks up a token the CLI refreshed mid-session, rather than
     // reusing a possibly-stale cached one (Codex #7). Keep the old key if the
     // fresh read comes back empty — it'll 401 with the source-aware guidance.
-    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    const cwd = this.workspaceRoot();
     const fresh = this.resolveVoiceApiKey(cwd);
     if (fresh) ctx.key = fresh;
     const streamer = new VoiceStreamer();
@@ -4422,7 +4493,7 @@ See design doc for the full state machine diagram.`;
       this.post({ type: "voiceError" });
       return;
     }
-    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    const cwd = this.workspaceRoot();
     const key = this.resolveVoiceApiKey(cwd);
     if (!key) {
       this.voiceRecorder.cancel();
@@ -5285,7 +5356,7 @@ See design doc for the full state machine diagram.`;
 
   private buildInitialStateMsg(): HostMsg {
     const cfg = vscode.workspace.getConfiguration("grok");
-    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    const cwd = this.workspaceRoot();
     return {
       type: "initialState",
       effort: cfg.get("defaultEffort", ""),
@@ -5521,7 +5592,7 @@ See design doc for the full state machine diagram.`;
   private sweepEmptyPrimerSessions(): void {
     if (this.sweptEmptySessions) return;
     this.sweptEmptySessions = true;
-    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    const cwd = this.workspaceRoot();
     const grokHome = resolveGrokHome(process.env);
     const log = (m: string) => this.output.appendLine(m);
     const overrides = this.context.globalState.get<SessionMetaOverrides>(SESSION_META_KEY, {});
@@ -5722,7 +5793,7 @@ See design doc for the full state machine diagram.`;
   private emitContextUsage(session: Session): void {
     const id = session.activeSessionId;
     if (!id) return;
-    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    const cwd = this.workspaceRoot();
     const usage = readContextUsage({ fs: defaultFs, grokHome: resolveGrokHome(process.env), cwd, id });
     if (usage) this.emit(session, { type: "contextUsage", used: usage.used, window: usage.window });
   }

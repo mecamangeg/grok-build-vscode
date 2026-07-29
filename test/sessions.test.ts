@@ -18,6 +18,7 @@ import {
   readContextUsage,
   readSessionEntries,
   resolveGrokHome,
+  sessionCatalogDirs,
   sessionsDirFor,
 } from "../src/sessions";
 
@@ -434,6 +435,84 @@ describe("readSessionEntries", () => {
       [path.join(dirFor("bad"), "summary.json")]: { isDir: false, content: "{ not json" },
     });
     expect(readSessionEntries({ fs, grokHome, cwd, ids: ["bad", "gone"], overrides: {} })).toEqual([]);
+  });
+});
+
+describe("sessionCatalogDirs (Windows drive-letter case split)", () => {
+  // grok keys a catalog on the raw cwd string, so the SAME Windows folder gets two
+  // catalogs: VS Code's uri.fsPath lower-cases the drive letter, a terminal-launched
+  // CLI does not. Reading only the exact encoding hides half the user's history.
+  const winHome = "C:\\Users\\u\\.grok";
+  const lower = "c:\\PROJECTS\\demo";
+  const upper = "C:\\PROJECTS\\demo";
+  const catalogRoot = path.join(winHome, "sessions");
+
+  function buildSplit(): FsLike {
+    const lowerDir = sessionsDirFor(winHome, lower);
+    const upperDir = sessionsDirFor(winHome, upper);
+    return buildFs({
+      [catalogRoot]: { isDir: true },
+      [lowerDir]: { isDir: true },
+      [upperDir]: { isDir: true },
+      [path.join(lowerDir, "from-vscode")]: { isDir: true },
+      [path.join(lowerDir, "from-vscode", "summary.json")]: {
+        isDir: false,
+        mtimeMs: 200,
+        content: JSON.stringify({ info: { id: "from-vscode", cwd: lower }, session_summary: "vscode work" }),
+      },
+      [path.join(upperDir, "from-cli")]: { isDir: true },
+      [path.join(upperDir, "from-cli", "summary.json")]: {
+        isDir: false,
+        mtimeMs: 100,
+        content: JSON.stringify({ info: { id: "from-cli", cwd: upper }, session_summary: "cli work" }),
+      },
+    });
+  }
+
+  it("returns both case-variant catalogs, exact encoding first", () => {
+    const fs = buildSplit();
+    expect(sessionCatalogDirs(fs, winHome, upper, "win32")).toEqual([
+      sessionsDirFor(winHome, upper),
+      sessionsDirFor(winHome, lower),
+    ]);
+  });
+
+  it("indexSessions merges both catalogs so neither half of history disappears", () => {
+    const fs = buildSplit();
+    const ids = indexSessions({ fs, grokHome: winHome, cwd: upper, platform: "win32" }).map((e) => e.id);
+    expect(ids).toEqual(["from-vscode", "from-cli"]);
+  });
+
+  it("readSessionEntries finds a summary living in the OTHER case variant", () => {
+    const fs = buildSplit();
+    const out = readSessionEntries({
+      fs,
+      grokHome: winHome,
+      cwd: upper,
+      ids: ["from-vscode"],
+      overrides: {},
+      platform: "win32",
+    });
+    expect(out.map((e) => e.displayName)).toEqual(["vscode work"]);
+  });
+
+  it("delete and clear reach both variants, so a removed row cannot reappear", () => {
+    const fs = buildSplit();
+    deleteSessionDir({ fs, grokHome: winHome, cwd: upper, id: "from-vscode", platform: "win32" });
+    expect(indexSessions({ fs, grokHome: winHome, cwd: upper, platform: "win32" }).map((e) => e.id))
+      .toEqual(["from-cli"]);
+    expect(clearSessions({ fs, grokHome: winHome, cwd: lower, platform: "win32" })).toEqual(["from-cli"]);
+    expect(indexSessions({ fs, grokHome: winHome, cwd: upper, platform: "win32" })).toEqual([]);
+  });
+
+  it("does NOT merge on a case-sensitive platform", () => {
+    const fs = buildSplit();
+    expect(sessionCatalogDirs(fs, winHome, upper, "linux")).toEqual([sessionsDirFor(winHome, upper)]);
+  });
+
+  it("never merges a genuinely different folder", () => {
+    const fs = buildSplit();
+    expect(sessionCatalogDirs(fs, winHome, "C:\\PROJECTS\\other", "win32")).toEqual([]);
   });
 });
 
