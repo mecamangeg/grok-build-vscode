@@ -13,7 +13,7 @@ import { VoiceStreamer } from "./voice-streamer";
 import type { PromptResultMeta } from "./acp-dispatch";
 import { MediaRef, addUsage, autoCompactStartedNote, contextUsedFromCompactNotification, errorDetail, gateZeroTokenMeta, isAuthErrorText, isCredentialError, isIncompatibleAgentError, isRateLimitError, isSubagentLifecycleUpdate, parseSessionInfoContext, permissionOutcomeFor, promptErrorText, rateLimitNoticeText, sumUsage, summarizeBackgroundCommand, usageIsRealMeasurement } from "./acp-dispatch";
 import { modeToRemember, startsInYolo } from "./mode-prefs";
-import { GROK_VIEW_ID, moveViewContainerFor } from "./view-move";
+import { GROK_VIEW_ID, PRIMARY_CONTAINER_ID, moveViewContainerFor } from "./view-move";
 import {
   APTABASE_APP_KEY_PROD,
   buildSessionStartEvent,
@@ -539,8 +539,18 @@ export class GrokSidebar implements vscode.WebviewViewProvider {
     }
   }
 
-  openModePopover(): void {
-    this.post({ type: "openModePopover" });
+  /**
+   * Move `grok.chat` directly into the Primary Side Bar container (`grokPrimary`) and focus it —
+   * the same one-click mover the gear "Move view -> To Primary Side Bar" item already drives
+   * (docs/PLAN-alt-ai-ui-layout-epilogue.md WS1.6), exposed as its own command so a Get-started
+   * wizard step can dock the chat without the user opening the gear menu.
+   */
+  async dockChatPrimary(): Promise<void> {
+    await vscode.commands.executeCommand("vscode.moveViews", {
+      viewIds: [GROK_VIEW_ID],
+      destinationId: PRIMARY_CONTAINER_ID,
+    });
+    await vscode.commands.executeCommand(`${GROK_VIEW_ID}.focus`);
   }
 
   /**
@@ -3332,6 +3342,9 @@ See design doc for the full state machine diagram.`;
       case "selectColorTheme":
         await vscode.commands.executeCommand("workbench.action.selectTheme");
         break;
+      case "applyAltLayout":
+        await this.applyAltLayout();
+        break;
       case "openText": {
         const doc = await vscode.workspace.openTextDocument({
           content: msg.content,
@@ -4556,6 +4569,38 @@ See design doc for the full state machine diagram.`;
       void vscode.window.showWarningMessage(
         `Robsky: couldn't open citation [${n}] (${e instanceof Error ? e.message : String(e)}).`,
       );
+    }
+  }
+
+  /**
+   * Top-bar "Layout" button (docs/PLAN-alt-ai-ui-layout-epilogue.md WS1.5). Relays to Robsky's own
+   * `robsky.applyAltLayout` command — the same fail-soft `getCommands().includes` shape as
+   * `openRobskyCitation` above, but deliberately SILENT: an absent command (Robsky extension not
+   * installed) or a rejecting command is a no-op, never a toast. Layout is a discoverable
+   * convenience button, not a workflow step whose failure the user needs to be told about.
+   */
+  private async applyAltLayout(): Promise<void> {
+    try {
+      const commands = await vscode.commands.getCommands(true);
+      if (!commands.includes("robsky.applyAltLayout")) return;
+      await vscode.commands.executeCommand("robsky.applyAltLayout");
+    } catch {
+      // silent by design — see doc comment above
+    }
+  }
+
+  /**
+   * New Session → clear Robsky Document Viewer + Sources (display only). Same fail-soft
+   * `getCommands().includes` shape as `applyAltLayout` — silent when Robsky isn't installed.
+   * Does not touch this fork's chat transcript (already cleared via `clearMessages`).
+   */
+  private async clearRobskyDocumentPanels(): Promise<void> {
+    try {
+      const commands = await vscode.commands.getCommands(true);
+      if (!commands.includes("robsky.clearDocumentPanels")) return;
+      await vscode.commands.executeCommand("robsky.clearDocumentPanels");
+    } catch {
+      // silent by design — see doc comment above
     }
   }
 
@@ -5895,6 +5940,9 @@ See design doc for the full state machine diagram.`;
     // the old transcript stayed onscreen under the fresh session. (The toolbar
     // path just clears twice, a no-op.)
     this.emit(this.focused, { type: "clearMessages" });
+    // Clear Robsky Document Viewer + Sources so prior-turn cites/docs don't linger
+    // beside an empty new chat (fail-soft if Robsky isn't installed).
+    await this.clearRobskyDocumentPanels();
     await this.startSession();
     if (this.focused.activeSessionId && this.focused.worktree) {
       const id = this.focused.activeSessionId;
@@ -6300,6 +6348,7 @@ See design doc for the full state machine diagram.`;
   <header class="top-bar">
     <button id="repo-btn" class="repo-chip" type="button" title="Choose repository"></button>
     <button id="color-theme-btn" class="icon-btn" type="button" title="Color Theme"></button>
+    <button id="layout-btn" class="icon-btn" type="button" title="Layout" aria-label="Layout"></button>
     <button id="history-btn" class="icon-btn" title="Session history"></button>
     <button id="new-btn" class="icon-btn" title="New session"></button>
     <div id="repo-popover" class="toolbar-popover repo-popover" hidden></div>
@@ -6308,8 +6357,9 @@ See design doc for the full state machine diagram.`;
 
   <main id="messages" class="messages">
     <div class="welcome" id="welcome">
-      <span class="welcome-mark" role="img" aria-label="Grok" style="--welcome-mark:url('${resourceUri("grok-icon.svg")}')"></span>
-      <h2>Grok Build (Community)</h2>
+      <span class="welcome-mark" role="img" aria-label="ALT AI" style="--welcome-mark:url('${resourceUri("grok-icon.svg")}')"></span>
+      <h2 id="welcome-heading" aria-describedby="welcome-subtitle">ALT AI</h2>
+      <p id="welcome-subtitle" class="welcome-subtitle muted">Mixture of AI experts for Accounting Legal &amp; Tax</p>
       <p class="welcome-byline muted">by Paweł Huryn (<a href="https://www.productcompass.pm/" class="muted-link">The Product Compass</a>)</p>
       <p id="welcome-version" class="muted loading-dots">Starting</p>
       <div id="welcome-onboarding"></div>
@@ -6322,7 +6372,7 @@ See design doc for the full state machine diagram.`;
       <div id="attachments" class="attachments"></div>
       <div class="composer-input-wrap">
         <div id="input-highlight" class="input-highlight" aria-hidden="true" dir="auto"></div>
-        <textarea id="input" placeholder="Ask Grok..." rows="2" dir="auto"></textarea>
+        <textarea id="input" placeholder="Ask AI..." rows="2" dir="auto"></textarea>
         <button id="mic-btn" class="mic-btn" title="Voice control"></button>
       </div>
       <div class="composer-toolbar">
@@ -6339,12 +6389,10 @@ See design doc for the full state machine diagram.`;
           <div id="chips"></div>
         </div>
         <div class="toolbar-right">
-          <button id="mode-btn" class="toolbar-btn" title="Pick mode"></button>
           <button id="send-btn" class="send"></button>
         </div>
       </div>
     </div>
-    <div id="mode-popover" class="toolbar-popover" hidden></div>
     <div id="gear-popover" class="toolbar-popover gear-popover" hidden></div>
     <div id="add-popover" class="toolbar-popover" hidden></div>
     <div id="context-popover" class="toolbar-popover" hidden></div>
@@ -6373,6 +6421,7 @@ See design doc for the full state machine diagram.`;
   <script nonce="${nonce}" src="${mediaUri("mathjax/tex-svg-full.js")}"></script>
   <script nonce="${nonce}" src="${mediaUri("mermaid/mermaid.min.js")}"></script>
   <script nonce="${nonce}" src="${mediaUri("webview-helpers.js")}"></script>
+  <script nonce="${nonce}" src="${mediaUri("epilogue-strip.js")}"></script>
   <script nonce="${nonce}" src="${mediaUri("chat.js")}"></script>
 </body>
 </html>`;

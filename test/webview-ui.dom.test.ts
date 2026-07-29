@@ -408,72 +408,11 @@ describe("session status dots (Agent Dashboard)", () => {
   });
 });
 
-describe("mode picker (the plan-gate entry path)", () => {
-  it("offers Agent / Plan / Auto accept and posts setMode with the chosen mode id", () => {
-    const { window, posted, doc } = bootWebview();
-    const pop = $(doc, "mode-popover");
-
-    click(window, $(doc, "mode-btn"));
-    expect((pop as any).hidden).toBe(false);
-    const labels = [...pop.querySelectorAll(".mode-item-label")].map((l) => l.textContent);
-    expect(labels).toEqual(["Agent mode", "Plan mode", "Auto accept"]);
-
-    const planItem = [...pop.querySelectorAll(".mode-popover-item")]
-      .find((el) => el.querySelector(".mode-item-label")!.textContent === "Plan mode") as HTMLElement;
-    click(window, planItem);
-
-    expect(posted).toContainEqual({ type: "setMode", modeId: "plan" });
-    expect((pop as any).hidden).toBe(true); // selecting a mode closes the popover
-  });
-
-  it("toggles the mode popover closed when the button is clicked again", () => {
-    const { window, doc } = bootWebview();
-    const pop = $(doc, "mode-popover");
-    click(window, $(doc, "mode-btn"));
-    expect((pop as any).hidden).toBe(false);
-    click(window, $(doc, "mode-btn"));
-    expect((pop as any).hidden).toBe(true);
-  });
-
-  // Regression: switching mode during session start called setMode before the
-  // session existed → "Couldn't switch mode: no session". The button is disabled
-  // only during the startup window (busyLocked); it stays live during a running
-  // turn (#64), and busyLocked always clears so it can't get stuck.
-  it("disables the mode button while starting (busyLocked) and won't open the picker or post setMode", () => {
-    const { window, posted, doc } = bootWebview({ ready: false }); // startup: busy + locked
-    const modeBtn = $(doc, "mode-btn") as HTMLButtonElement;
-    expect(modeBtn.disabled).toBe(true);
-    expect(modeBtn.className).toContain("disabled");
-
-    click(window, modeBtn);
-    expect(($(doc, "mode-popover") as any).hidden).toBe(true); // picker never opened
-    expect(types(posted)).not.toContain("setMode");
-  });
-
-  it("enables the mode button once the session is ready", () => {
-    const { window, doc } = bootWebview(); // ready → busy cleared
-    const modeBtn = $(doc, "mode-btn") as HTMLButtonElement;
-    expect(modeBtn.disabled).toBe(false);
-    click(window, modeBtn);
-    expect(($(doc, "mode-popover") as any).hidden).toBe(false); // opens normally
-  });
-
-  // #64: switching to Auto-accept mid-run is the whole point — a running turn
-  // (busy, but NOT the locked startup window) must keep the picker usable.
-  it("keeps the mode button live during a running turn so Auto-accept can be picked mid-run (#64)", () => {
-    const { window, posted, doc } = bootWebview(); // ready
-    dispatch(window, { type: "setBusy", value: true }); // a normal running turn (locked defaults false)
-    const modeBtn = $(doc, "mode-btn") as HTMLButtonElement;
-    expect(modeBtn.disabled).toBe(false);
-    click(window, modeBtn);
-    const pop = $(doc, "mode-popover");
-    expect((pop as any).hidden).toBe(false); // picker opens mid-turn
-    const yolo = [...pop.querySelectorAll(".mode-popover-item")]
-      .find((el) => el.querySelector(".mode-item-label")!.textContent === "Auto accept") as HTMLElement;
-    click(window, yolo);
-    expect(posted).toContainEqual({ type: "setMode", modeId: "yolo" });
-  });
-});
+// The in-chat mode picker (#mode-btn / #mode-popover, setMode) was removed under
+// docs/PLAN-alt-ai-ui-layout-epilogue.md WS1.2 (Auto-Accept only) — this build ships
+// grok.defaultMode="yolo" packaged with no picker to re-offer Agent/Plan. See
+// src/mode-prefs.test.ts for the remembered-preference logic that still backs a
+// settings.json-level mode switch.
 
 describe("context donut (token usage)", () => {
   const boot = () => {
@@ -1081,19 +1020,6 @@ describe("gear menu — Other group + About / Config & debug sub-views", () => {
 
     click(h.window, itemByText(h.doc, "Show extension logs"));
     expect(types(h.posted)).toContain("showLogs");
-  });
-});
-
-describe("Auto accept mode label (#25 rename)", () => {
-  it("labels the auto-approve mode 'Auto accept' and keeps YOLO only in the description", () => {
-    const { window, doc } = bootWebview();
-    click(window, $(doc, "mode-btn"));
-    const pop = $(doc, "mode-popover");
-    const yolo = [...pop.querySelectorAll(".mode-popover-item")].find(
-      (el) => el.querySelector(".mode-item-label")?.textContent === "Auto accept",
-    ) as HTMLElement;
-    expect(yolo).toBeTruthy();
-    expect(yolo.querySelector(".mode-item-desc")?.textContent).toContain("YOLO");
   });
 });
 

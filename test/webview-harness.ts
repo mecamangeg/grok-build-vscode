@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const helperSrc = read("../media/webview-helpers.js");
+const epilogueStripSrc = read("../media/epilogue-strip.js");
 const chatSrc = read("../media/chat.js");
 
 // Mirror of getHtml()'s <body> — only the ids chat.js queries at startup matter.
@@ -22,6 +23,7 @@ export const BODY = `
   <header class="top-bar">
     <button id="repo-btn"></button>
     <button id="color-theme-btn"></button>
+    <button id="layout-btn"></button>
     <button id="history-btn"></button>
     <button id="new-btn"></button>
     <div id="repo-popover" hidden></div>
@@ -46,10 +48,8 @@ export const BODY = `
       <button id="gear-btn"></button>
       <div id="donut"><svg><circle id="donut-arc"/></svg><span id="donut-label"></span></div>
       <div id="chips"></div>
-      <button id="mode-btn"></button>
       <button id="send-btn"></button>
     </div>
-    <div id="mode-popover" hidden></div>
     <div id="gear-popover" hidden></div>
     <div id="add-popover" hidden></div>
     <div id="context-popover" hidden></div>
@@ -84,6 +84,7 @@ export function bootWebview(opts: {
   if (opts.remote) (window as any).grokRemoteClient = true;
   if (opts.beforeScripts) opts.beforeScripts(window);
   (window as any).eval(helperSrc);
+  (window as any).eval(epilogueStripSrc);
   (window as any).eval(chatSrc);
   // The webview now boots busy+locked (startup spinner) and only goes idle once
   // the host posts setBusy:false after the session is live. Most tests exercise

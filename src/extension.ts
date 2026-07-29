@@ -33,7 +33,6 @@ export function activate(context: vscode.ExtensionContext): GrokExtensionApi {
       );
     }),
     vscode.commands.registerCommand("grok.pickModel", () => sidebar.pickModel()),
-    vscode.commands.registerCommand("grok.toggleMode", () => sidebar.openModePopover()),
     vscode.commands.registerCommand("grok.sendSelection", () =>
       sidebar.insertActiveMention({ selection: true }),
     ),
@@ -45,11 +44,12 @@ export function activate(context: vscode.ExtensionContext): GrokExtensionApi {
       sidebar.insertActiveMention(),
     ),
     vscode.commands.registerCommand("grok.showLogs", () => output.show()),
-    vscode.commands.registerCommand("grok.expandAllToolDetails", () => sidebar.setAllToolDetails(true)),
-    vscode.commands.registerCommand("grok.collapseAllToolDetails", () => sidebar.setAllToolDetails(false)),
     vscode.commands.registerCommand("grok.logout", () => sidebar.logout()),
     vscode.commands.registerCommand("grok.linkRemote", () => sidebar.linkRemoteDevice()),
     vscode.commands.registerCommand("grok.unlinkRemote", () => sidebar.unlinkRemoteDevice()),
+    // ALT AI layout (docs/PLAN-alt-ai-ui-layout-epilogue.md WS1.6): one-click dock
+    // of grok.chat into the Primary Side Bar, for a Get-started wizard step.
+    vscode.commands.registerCommand("grok.dockChatPrimary", () => sidebar.dockChatPrimary()),
     // Internal debug helper for manually exercising the plan-review card UI
     // (Approve / Reject / Cancel flows) without a live CLI session.
     vscode.commands.registerCommand("grok._debugDummyPlan", () => sidebar.debugShowDummyPlan()),

@@ -1,9 +1,10 @@
 // Robsky numeric citation markers (docs/NOTE-community-fork-cite-bridge.md) — the fork's one
 // documented no-fork exception (PLAN v3). Confirms the three marker forms kitchen's contract
 // documents (⟦N⟧ canonical, [[N]] ASCII fallback, bare [N] once rewritten for display) render as
-// clickable badges, that the deliberately-excluded [[prov:...]] form stays inert, that a real
-// markdown link isn't hijacked, and that a click posts the exact "openCitation" message
-// sidebar.ts's host handler expects.
+// clickable badges, that the deliberately-excluded [[prov:...]] form is hidden at display (chat-
+// egress epilogue filter, docs/PLAN-alt-ai-ui-layout-epilogue.md WS1.7) rather than turned into a
+// cite-marker badge, that a real markdown link isn't hijacked, and that a click posts the exact
+// "openCitation" message sidebar.ts's host handler expects.
 import { describe, it, expect } from "vitest";
 import { bootWebview, dispatch, click, Posted } from "./webview-harness";
 
@@ -38,10 +39,12 @@ describe("Robsky citation markers ([[n]] / \u27e6n\u27e7 / [n])", () => {
     expect(badge!.textContent).toBe("[3]");
   });
 
-  it("leaves [[prov:...]] untouched — not part of kitchen's numeric citation contract", () => {
+  it("hides [[prov:...]] at display — WS1.7 chat-egress filter, not kitchen's numeric citation contract", () => {
     const { el } = renderAgent("Trailing marker [[prov:abc123]] here.");
     expect(el.querySelector("a.cite-marker")).toBeNull();
-    expect(el.textContent).toContain("[[prov:abc123]]");
+    expect(el.textContent).not.toContain("[[prov:abc123]]");
+    expect(el.textContent).toContain("Trailing marker");
+    expect(el.textContent).toContain("here.");
   });
 
   it("does not hijack a real markdown link whose text happens to be a number", () => {

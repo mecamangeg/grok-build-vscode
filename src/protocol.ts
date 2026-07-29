@@ -67,7 +67,6 @@ export type HostMsg =
   | { type: "session"; sessionId: string; models: ModelInfo[]; currentModelId: string | undefined; worktree?: boolean }
   | { type: "modelChanged"; modelId: string }
   | { type: "modeChanged"; modeId: string }
-  | { type: "openModePopover" }
   | { type: "voiceState"; status: "listening" | "transcribing" | "idle" }
   | { type: "voiceConfigured"; value: boolean; sendPhrase?: string }
   | { type: "voicePartial"; text: string }
@@ -299,7 +298,13 @@ export type WebviewMsg =
   // Robsky's Sources) via the `vscode-light`/`vscode-dark` body class +
   // `--vscode-*` custom properties it already manages, so no separate cross-
   // extension theme message is needed.
-  | { type: "selectColorTheme" };
+  | { type: "selectColorTheme" }
+  // Top-bar "Layout" button clicked (AD-… docs/PLAN-alt-ai-ui-layout-epilogue.md
+  // WS1.5): fail-soft request to run the ALT AI layout command contributed by
+  // the thin Robsky extension. Host checks `vscode.commands.getCommands()`
+  // before executing — an absent command is a silent no-op, never an error
+  // toast (the fork must not assume Robsky's extension is installed).
+  | { type: "applyAltLayout" };
 
 // Exhaustive maps: `Record<Union["type"], true>` forces every discriminant to be
 // a key (missing -> tsc error) and forbids any extra (excess-property -> tsc
@@ -308,7 +313,7 @@ export type WebviewMsg =
 const HOST_MESSAGE_TYPE_MAP: Record<HostMsg["type"], true> = {
   initialState: true, showThinking: true, fontScale: true, grokUpdateStatus: true,
   initialized: true, cliUpdating: true, session: true, modelChanged: true,
-  modeChanged: true, openModePopover: true, voiceState: true, voiceConfigured: true,
+  modeChanged: true, voiceState: true, voiceConfigured: true,
   voicePartial: true, voiceSubmit: true, voiceTranscript: true, voiceError: true,
   chips: true, commandsUpdate: true, mentionResults: true, userMessage: true, agentStart: true,
   thoughtChunk: true, messageChunk: true, media: true, userMessageChunk: true,
@@ -345,6 +350,7 @@ const WEBVIEW_MESSAGE_TYPE_MAP: Record<WebviewMsg["type"], true> = {
   newWorktreeSession: true, applyWorktree: true, removeWorktree: true,
   rewindSession: true, editLastMessage: true, uiConfirmAnswer: true, workflowControl: true,
   remoteSignIn: true, remoteSignOut: true, openRemotePortal: true, selectColorTheme: true,
+  applyAltLayout: true,
 };
 
 export const HOST_MESSAGE_TYPES: readonly HostMsg["type"][] = Object.keys(HOST_MESSAGE_TYPE_MAP) as HostMsg["type"][];

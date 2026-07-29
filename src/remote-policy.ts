@@ -140,6 +140,10 @@ export const INBOUND_DISPOSITION: Record<WebviewMsg["type"], InboundDisposition>
   // — same class as openGlobalConfig, and a remote's own display has no reason
   // to follow the desk's theme pick anyway.
   selectColorTheme: "host-local",
+  // Executes a LOCAL VS Code command (robsky.applyAltLayout) on the desk's own
+  // window — same class as selectColorTheme; a remote's layout has nothing to
+  // do with the desk's panel arrangement.
+  applyAltLayout: "host-local",
 };
 
 const TIER_RANK: Record<RemoteTier, number> = { "read-only": 0, propose: 1, full: 2 };
@@ -231,7 +235,6 @@ export const OUTBOUND_DISPOSITION: Record<HostMsg["type"], OutboundDisposition> 
   session: "mirror",
   modelChanged: "mirror",
   modeChanged: "mirror",
-  openModePopover: "mirror",
   chips: "mirror",
   commandsUpdate: "mirror",
   mentionResults: "mirror",

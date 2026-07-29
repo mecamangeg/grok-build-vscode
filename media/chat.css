@@ -276,7 +276,11 @@ a.cite-marker:hover {
   mask: var(--welcome-mark) center / contain no-repeat;
 }
 .welcome h2 { margin: 0; font-weight: 600; }
-.welcome-byline { margin: 0; font-size: 11px; }
+.welcome-subtitle { margin: 0; font-size: 12px; }
+/* Demoted (docs/PLAN-alt-ai-ui-layout-epilogue.md WS1.3): the ALT AI subtitle above is now the
+   headline description; the upstream Community attribution steps back to a smaller, dimmer line
+   (kept, per LICENSE/attribution — never removed). */
+.welcome-byline { margin: 0; font-size: 10px; opacity: 0.7; }
 .muted-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .muted-link:hover { opacity: 0.8; }
 

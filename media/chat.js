@@ -46,6 +46,10 @@
   const historyBtn = $("history-btn");
   const repoBtn = $("repo-btn");
   const colorThemeBtn = $("color-theme-btn");
+  const layoutBtn = $("layout-btn");
+  // Removed from the lawyer UI (docs/PLAN-alt-ai-ui-layout-epilogue.md WS1.2, Auto-Accept only) —
+  // #mode-btn / #mode-popover no longer exist in the DOM. Every reference below is null-guarded so
+  // state.currentModeId still tracks the host's modeChanged messages without touching the UI.
   const modeBtn = $("mode-btn");
   const gearBtn = $("gear-btn");
   const addBtn = $("add-btn");
@@ -505,6 +509,7 @@
   }
 
   function updateModeBtn(modeId) {
+    if (!modeBtn) return; // no in-chat mode picker (Auto-Accept only) — state.currentModeId still updates
     const meta = MODE_META[modeId] || MODE_META.agent;
     modeBtn.innerHTML = `${meta.icon}<span class="btn-label">${escapeHtml(meta.label)}</span>`;
     modeBtn.classList.toggle("plan-active", modeId === "plan");
@@ -514,6 +519,7 @@
   newBtn.innerHTML = ICON.squarePen;
   historyBtn.innerHTML = ICON.clock;
   colorThemeBtn.innerHTML = ICON.palette;
+  layoutBtn.innerHTML = ICON.panelLeft;
   updateSendButton(); // spinner by default — session is starting up (busy+locked)
   gearBtn.innerHTML = ICON.gear;
   addBtn.innerHTML = ICON.plus;
@@ -523,6 +529,10 @@
   // ---------- markdown ----------
 
   const { looksLikeFileRef, formatRelativeTime, modelDisplayName, nextMicState, trailingSendPhrase, buildQuestionAnswers, isSubagentToolCall, subagentLabel, cleanSubagentOutput, parseSubagentTaskResult, shouldStickToBottom, splitMath, stripUnsupportedTex, toolFailureText, commandProgramLabel, commandTextPreview, extractToolResultOutput, computeLineDiff, parseAttachmentContext, parseSelectionBlocks, parseImageTags, isKnownHostMessage, getMentionQuery, applyMentionPick, orderPermissionOptions, defaultPermissionIndex, shouldFocusPermissionCard, isTypeThroughKey, isInterjectionText, spokenTextFromMarkdown } = globalThis.GrokWebviewHelpers;
+  // Chat-egress epilogue filter (docs/PLAN-alt-ai-ui-layout-epilogue.md WS1.7) — loaded from
+  // media/epilogue-strip.js before this script. Applied ONCE at turn finalize (commitAgentTurn)
+  // and to the TTS buffer (speakCompletedTurn); never at intermediate streaming chunks.
+  const { stripEpilogueForChat } = globalThis.GrokEpilogueStrip;
 
   function escapeAttr(s) {
     return String(s == null ? "" : s)
@@ -1265,7 +1275,7 @@
   // ---------- popovers ----------
 
   function closePopovers() {
-    modePopover.hidden = true;
+    if (modePopover) modePopover.hidden = true;
     gearPopover.hidden = true;
     addPopover.hidden = true;
     historyPopover.hidden = true;
@@ -1831,22 +1841,10 @@
       };
       gearPopover.appendChild(fontRow);
     }
-    // Expand tool details (#41/#45) — the persisted default: pre-open every tool
-    // detail surface (a command's IN/OUT block, an edit's inline diff) + the
-    // groups that hold one. Named to match the "Expand/Collapse All Tool Details"
-    // commands. Flipping it clears the per-session Expand/Collapse All latch so the
-    // setting takes over (last action wins). Persisted via grok.expandCommandOutputs
-    // (the key is unchanged — only the user-facing label widened).
-    addGearItem(
-      `<span title="Pre-open each command's IN/OUT block and each edit's inline diff by default, instead of clicking a row (›) to expand it. Edit rows always show a +N −M change count either way.">Expand tool details</span><span class="popover-switch${state.expandCommandOutputs ? " on" : ""}" role="switch" aria-checked="${state.expandCommandOutputs}"><span class="popover-switch-knob"></span></span>`,
-      () => {
-        state.expandCommandOutputs = !state.expandCommandOutputs;
-        state.toolExpandOverride = null;
-        applyExpandCommandOutputs();
-        vscode.postMessage({ type: "setExpandCommandOutputs", value: state.expandCommandOutputs });
-        renderConfigDebugPanel();
-      },
-    );
+    // Expand tool details switch REMOVED (docs/PLAN-alt-ai-ui-layout-epilogue.md WS1.1, AD-11 —
+    // tool density stays ALWAYS minimal). state.expandCommandOutputs stays wired for
+    // grok.expandCommandOutputs (default false, a settings.json escape hatch); there is just no
+    // in-chat control that can flip it.
     // Steer by default (#52) — how a message sent mid-turn behaves. Off keeps
     // the queue (and the per-message Steer button); on skips the queue entirely.
     // Hidden when the CLI can't interject: offering a switch that silently does
@@ -1979,6 +1977,7 @@
   }
 
   function openModePopover() {
+    if (!modePopover || !modeBtn) return; // no in-chat mode picker (Auto-Accept only)
     if (!modePopover.hidden) { closePopovers(); return; }
     modePopover.innerHTML = "";
     for (const [id, meta] of Object.entries(MODE_META)) {
@@ -4348,7 +4347,7 @@
       state.ttsTurnText = "";
       return;
     }
-    const text = spokenTextFromMarkdown(state.ttsTurnText);
+    const text = spokenTextFromMarkdown(stripEpilogueForChat(state.ttsTurnText));
     state.ttsTurnText = "";
     if (!text) return;
     window.speechSynthesis.cancel();
@@ -4360,6 +4359,11 @@
   // the next chunk starts a fresh bubble. Used on promptComplete and at the
   // user-message boundary while replaying a loaded session.
   function commitAgentTurn() {
+    // Chat-egress epilogue filter (docs/PLAN-alt-ai-ui-layout-epilogue.md WS1.7): strip a trailing
+    // model-authored epilogue + hide [[prov:...]] tokens ONCE at finalize, before flushAgent's
+    // re-render — this also cleans wrapper._copyText, since flushAgent sets it from this same
+    // state.activeAgentRaw. Never applied to intermediate streaming chunks (appendAgent).
+    if (state.activeAgentRaw) state.activeAgentRaw = stripEpilogueForChat(state.activeAgentRaw);
     flushAgent();
     flushThought();
     if (state.thoughtStartTime && state.activeThoughtHdrEl) {
@@ -5575,9 +5579,11 @@
     // setMode gate is client-side (autoApprove) so it takes effect immediately.
     // Only the session-start window (busyLocked: spawn → session/new → priming) is
     // locked, where a setMode would throw "no session"; that flag always clears.
-    modeBtn.disabled = state.busyLocked;
-    modeBtn.classList.toggle("disabled", state.busyLocked);
-    modeBtn.title = state.busyLocked ? "Mode — available once the session is ready" : "Pick mode";
+    if (modeBtn) {
+      modeBtn.disabled = state.busyLocked;
+      modeBtn.classList.toggle("disabled", state.busyLocked);
+      modeBtn.title = state.busyLocked ? "Mode — available once the session is ready" : "Pick mode";
+    }
     if (!state.busy) {
       sendBtn.innerHTML = ICON.arrowUp;
       sendBtn.title = "Send";
@@ -6186,9 +6192,6 @@
       case "modeChanged":
         state.currentModeId = msg.modeId;
         updateModeBtn(msg.modeId);
-        break;
-      case "openModePopover":
-        openModePopover();
         break;
       case "voiceState":
         // Host confirms a transition (e.g. recording actually started). Only
@@ -6867,9 +6870,10 @@
     resetForNewSession();
     vscode.postMessage({ type: "newSession" });
   };
-  modeBtn.onclick = (e) => { e.stopPropagation(); if (state.busyLocked) return; openModePopover(); };
+  if (modeBtn) modeBtn.onclick = (e) => { e.stopPropagation(); if (state.busyLocked) return; openModePopover(); };
   gearBtn.onclick = (e) => { e.stopPropagation(); openGearPopover(); };
   colorThemeBtn.onclick = (e) => { e.stopPropagation(); vscode.postMessage({ type: "selectColorTheme" }); };
+  layoutBtn.onclick = (e) => { e.stopPropagation(); vscode.postMessage({ type: "applyAltLayout" }); };
 
   // Welcome screen's "about" link → open the gear popover's Version & about panel.
   const welcomeAboutLink = $("welcome-about-link");
@@ -6884,7 +6888,7 @@
     e.stopPropagation();
     if (contextPopover.hidden) openContextPopover(); else closePopovers();
   };
-  modePopover.addEventListener("click", (e) => e.stopPropagation());
+  if (modePopover) modePopover.addEventListener("click", (e) => e.stopPropagation());
   gearPopover.addEventListener("click", (e) => e.stopPropagation());
   contextPopover.addEventListener("click", (e) => e.stopPropagation());
   repoPopover.addEventListener("click", (e) => e.stopPropagation());

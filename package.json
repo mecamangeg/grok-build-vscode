@@ -46,21 +46,21 @@
       "secondarySidebar": [
         {
           "id": "grokSidebar",
-          "title": "Grok",
+          "title": "ALT AI",
           "icon": "resources/grok-icon.svg"
         }
       ],
       "activitybar": [
         {
           "id": "grokPrimary",
-          "title": "Grok",
+          "title": "ALT AI",
           "icon": "resources/grok-icon.svg"
         }
       ],
       "panel": [
         {
           "id": "grokPanel",
-          "title": "Grok",
+          "title": "ALT AI",
           "icon": "resources/grok-icon.svg"
         }
       ]
@@ -70,7 +70,7 @@
         {
           "type": "webview",
           "id": "grok.chat",
-          "name": "Grok"
+          "name": "ALT AI"
         }
       ]
     },
@@ -108,10 +108,6 @@
         "title": "Grok: Pick Model"
       },
       {
-        "command": "grok.toggleMode",
-        "title": "Grok: Toggle Plan / Agent Mode"
-      },
-      {
         "command": "grok.sendSelection",
         "title": "Add Selection to Grok"
       },
@@ -128,16 +124,12 @@
         "title": "Grok: Show Logs"
       },
       {
-        "command": "grok.expandAllToolDetails",
-        "title": "Grok: Expand All Tool Details (This Session)"
-      },
-      {
-        "command": "grok.collapseAllToolDetails",
-        "title": "Grok: Collapse All Tool Details (This Session)"
-      },
-      {
         "command": "grok.logout",
         "title": "Grok: Log Out"
+      },
+      {
+        "command": "grok.dockChatPrimary",
+        "title": "Grok: Dock Chat in Primary Side Bar"
       },
       {
         "command": "grok.linkRemote",
@@ -218,8 +210,8 @@
             "Agent mode",
             "Auto accept — auto-approve every permission request"
           ],
-          "default": "",
-          "description": "Mode for new sessions. Updated automatically to remember your last switch between Agent and Auto accept (Plan is never remembered). Empty = Agent."
+          "default": "yolo",
+          "description": "Mode for new sessions. This build ships with Auto accept as the packaged default and no in-chat mode picker (settings.json remains a power-user escape hatch). Updated automatically to remember your last switch between Agent and Auto accept (Plan is never remembered)."
         },
         "grok.includeActiveFileByDefault": {
           "type": "boolean",

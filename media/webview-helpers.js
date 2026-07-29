@@ -15,7 +15,7 @@
   // directions (and that chat.js actually handles every host type).
   const HOST_MESSAGE_TYPES = [
     "initialState", "showThinking", "fontScale", "grokUpdateStatus", "initialized",
-    "cliUpdating", "session", "modelChanged", "modeChanged", "openModePopover",
+    "cliUpdating", "session", "modelChanged", "modeChanged",
     "voiceState", "voiceConfigured", "voicePartial", "voiceSubmit", "voiceTranscript",
     "voiceError", "chips", "commandsUpdate", "mentionResults", "userMessage", "agentStart", "thoughtChunk",
     "messageChunk", "media", "userMessageChunk", "historyReplay", "permissionHistoryQueue",
@@ -38,7 +38,7 @@
     "queueSend", "dequeueSend", "clearQueuedSends", "steerSend", "forkSession", "setSteerByDefault",
     "setSoundNotifications", "setReadRepliesAloud",
     "newWorktreeSession", "applyWorktree", "removeWorktree", "rewindSession", "editLastMessage", "uiConfirmAnswer", "workflowControl",
-    "remoteSignIn", "remoteSignOut", "openRemotePortal", "selectColorTheme",
+    "remoteSignIn", "remoteSignOut", "openRemotePortal", "selectColorTheme", "applyAltLayout",
   ];
   const HOST_MESSAGE_TYPE_SET = new Set(HOST_MESSAGE_TYPES);
   /** True when `type` is a host->webview message the contract knows about. A
