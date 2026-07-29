@@ -3255,6 +3255,12 @@ See design doc for the full state machine diagram.`;
       case "openUrl":
         void vscode.env.openExternal(vscode.Uri.parse(msg.url));
         break;
+      case "openCitation":
+        await this.openRobskyCitation(msg.n);
+        break;
+      case "selectColorTheme":
+        await vscode.commands.executeCommand("workbench.action.selectTheme");
+        break;
       case "openText": {
         const doc = await vscode.workspace.openTextDocument({
           content: msg.content,
@@ -4452,6 +4458,33 @@ See design doc for the full state machine diagram.`;
     } finally {
       try { if (this.voiceTempPath) fs.unlinkSync(this.voiceTempPath); } catch { /* best effort */ }
       this.voiceTempPath = undefined;
+    }
+  }
+
+  /**
+   * Robsky cite-click bridge (docs/NOTE-community-fork-cite-bridge.md) — the ONLY place this fork
+   * knows Robsky exists at all. Relays a clicked numeric citation marker to Robsky's own
+   * `robsky.openCitation` command, which resolves it against its own workspace
+   * `.robsky/sealed-view.json` and opens/highlights its Viewer. This extension has no sealed-view
+   * knowledge and never reads that file itself. Never throws back to the caller — a missing
+   * Robsky install, or the command itself rejecting, surfaces as a warning toast instead of a
+   * silently-dead chat click.
+   */
+  private async openRobskyCitation(n: number): Promise<void> {
+    if (!Number.isFinite(n)) return;
+    try {
+      const commands = await vscode.commands.getCommands(true);
+      if (!commands.includes("robsky.openCitation")) {
+        void vscode.window.showWarningMessage(
+          `Install the Robsky extension to open citation [${n}] in Viewer.`,
+        );
+        return;
+      }
+      await vscode.commands.executeCommand("robsky.openCitation", n);
+    } catch (e) {
+      void vscode.window.showWarningMessage(
+        `Robsky: couldn't open citation [${n}] (${e instanceof Error ? e.message : String(e)}).`,
+      );
     }
   }
 
@@ -6195,6 +6228,7 @@ See design doc for the full state machine diagram.`;
 
   <header class="top-bar">
     <button id="repo-btn" class="repo-chip" type="button" title="Choose repository"></button>
+    <button id="color-theme-btn" class="icon-btn" type="button" title="Color Theme"></button>
     <button id="history-btn" class="icon-btn" title="Session history"></button>
     <button id="new-btn" class="icon-btn" title="New session"></button>
     <div id="repo-popover" class="toolbar-popover repo-popover" hidden></div>

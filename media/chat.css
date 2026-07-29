@@ -125,6 +125,18 @@ a:hover {
   color: inherit;
 }
 
+/* Robsky numeric citation markers ([[n]] / bracket-n / [n]) — minimal badge on top of the
+   shared `a`/`a:hover` link styling above (docs/NOTE-community-fork-cite-bridge.md). */
+a.cite-marker {
+  font-weight: 600;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(128, 128, 128, 0.15);
+}
+a.cite-marker:hover {
+  background: rgba(128, 128, 128, 0.28);
+}
+
 /* ---- top bar ---- */
 
 .top-bar {

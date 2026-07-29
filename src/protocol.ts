@@ -190,6 +190,12 @@ export type WebviewMsg =
   | { type: "toggleChip"; id: string }
   | { type: "openFile"; path: string }
   | { type: "openUrl"; url: string }
+  // Robsky cite-click bridge (docs/NOTE-community-fork-cite-bridge.md, PLAN v3's one documented
+  // no-fork exception): a numeric citation marker ([[n]] / \u27e6n\u27e7 / [n]) rendered clickable
+  // in chat.js was clicked. `n` is the 1-based citation/source number from kitchen's sealed-view
+  // contract, forwarded verbatim to Robsky's `robsky.openCitation` command — this extension has
+  // NO knowledge of what a "citation" is, it only relays the click.
+  | { type: "openCitation"; n: number }
   | { type: "openText"; content: string; language: string }
   | {
       type: "openDiff";
@@ -283,7 +289,17 @@ export type WebviewMsg =
   // device-link flow / drop the device token / open the relay web portal.
   | { type: "remoteSignIn" }
   | { type: "remoteSignOut" }
-  | { type: "openRemotePortal" };
+  | { type: "openRemotePortal" }
+  // Top-bar "Color Theme" button clicked: host opens VS Code's own native color
+  // theme Quick Pick (`workbench.action.selectTheme`) — the exact same picker as
+  // the Command Palette's "Preferences: Color Theme", so the set of choices and
+  // the live-preview-while-browsing behavior are never our own to maintain. A
+  // pick made there is a workbench-level `workbench.colorTheme` change VS Code
+  // itself cascades to EVERY live webview (this one, Robsky's Viewer, and
+  // Robsky's Sources) via the `vscode-light`/`vscode-dark` body class +
+  // `--vscode-*` custom properties it already manages, so no separate cross-
+  // extension theme message is needed.
+  | { type: "selectColorTheme" };
 
 // Exhaustive maps: `Record<Union["type"], true>` forces every discriminant to be
 // a key (missing -> tsc error) and forbids any extra (excess-property -> tsc
@@ -312,6 +328,7 @@ const HOST_MESSAGE_TYPE_MAP: Record<HostMsg["type"], true> = {
 const WEBVIEW_MESSAGE_TYPE_MAP: Record<WebviewMsg["type"], true> = {
   ready: true, remotePreferences: true, send: true, newSession: true, cancel: true, pickModel: true,
   setMode: true, removeChip: true, toggleChip: true, openFile: true, openUrl: true,
+  openCitation: true,
   openText: true, openDiff: true, exportExpr: true, setEffort: true, openGlobalConfig: true,
   openProjectConfig: true, runMcpList: true, showLogs: true, moveView: true,
   setShowThinking: true, setExpandCommandOutputs: true, setSteerByDefault: true,
@@ -327,7 +344,7 @@ const WEBVIEW_MESSAGE_TYPE_MAP: Record<WebviewMsg["type"], true> = {
   steerSend: true, forkSession: true,
   newWorktreeSession: true, applyWorktree: true, removeWorktree: true,
   rewindSession: true, editLastMessage: true, uiConfirmAnswer: true, workflowControl: true,
-  remoteSignIn: true, remoteSignOut: true, openRemotePortal: true,
+  remoteSignIn: true, remoteSignOut: true, openRemotePortal: true, selectColorTheme: true,
 };
 
 export const HOST_MESSAGE_TYPES: readonly HostMsg["type"][] = Object.keys(HOST_MESSAGE_TYPE_MAP) as HostMsg["type"][];

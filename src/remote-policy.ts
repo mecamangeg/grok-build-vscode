@@ -109,6 +109,9 @@ export const INBOUND_DISPOSITION: Record<WebviewMsg["type"], InboundDisposition>
   pickModel: "host-local",
   openFile: "host-local",
   openUrl: "host-local",
+  // Opens Robsky's own webview panel (a separate extension) on the dev box — same class as
+  // openFile/openUrl, and Robsky's Viewer/sealed-view state isn't remote-mirrored anyway.
+  openCitation: "host-local",
   openText: "host-local",
   openDiff: "host-local",
   exportExpr: "host-local",
@@ -133,6 +136,10 @@ export const INBOUND_DISPOSITION: Record<WebviewMsg["type"], InboundDisposition>
   remoteSignIn: "host-local",
   remoteSignOut: "host-local",
   openRemotePortal: "host-local",
+  // Opens THIS machine's native color-theme Quick Pick (global VS Code config)
+  // — same class as openGlobalConfig, and a remote's own display has no reason
+  // to follow the desk's theme pick anyway.
+  selectColorTheme: "host-local",
 };
 
 const TIER_RANK: Record<RemoteTier, number> = { "read-only": 0, propose: 1, full: 2 };

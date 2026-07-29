@@ -45,6 +45,7 @@
   const newBtn = $("new-btn");
   const historyBtn = $("history-btn");
   const repoBtn = $("repo-btn");
+  const colorThemeBtn = $("color-theme-btn");
   const modeBtn = $("mode-btn");
   const gearBtn = $("gear-btn");
   const addBtn = $("add-btn");
@@ -364,6 +365,7 @@
     chevronRight: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`,
     chevronDown: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`,
     clock: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+    palette: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/><circle cx="13.5" cy="6.5" r=".75" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".75" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".75" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".75" fill="currentColor" stroke="none"/></svg>`,
     plus: `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`,
     x: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
     upload: `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>`,
@@ -511,6 +513,7 @@
 
   newBtn.innerHTML = ICON.squarePen;
   historyBtn.innerHTML = ICON.clock;
+  colorThemeBtn.innerHTML = ICON.palette;
   updateSendButton(); // spinner by default — session is starting up (busy+locked)
   gearBtn.innerHTML = ICON.gear;
   addBtn.innerHTML = ICON.plus;
@@ -651,6 +654,49 @@
     } catch (_) {
       mermaidReady = false;
     }
+  }
+
+  // Minimal surgical fix (Michael 2026-07-29, "Community fork chat re-themes on workbench theme
+  // change"): every OTHER chat surface here is plain --vscode-*/body.vscode-light CSS, which VS
+  // Code already re-applies live on a theme change with zero JS — that part needed no fix. Mermaid
+  // is the one exception: mermaid.initialize()'s theme choice and every cached SVG in
+  // mermaidSvgCache are baked in at RENDER time (mermaid draws its own internal fills/strokes into
+  // static SVG, it doesn't read CSS custom properties), so a diagram rendered before a theme flip
+  // silently kept its old palette until the next re-render. Re-render every already-decorated
+  // diagram from its retained source (`data-export-src`, set by decorateMermaid) whenever the host
+  // toggles body.vscode-light/-dark — the same class VS Code itself manages live, so this needs no
+  // extension-side onDidChangeActiveColorTheme listener of its own.
+  function retintMermaidDiagrams() {
+    if (!mermaidReady) return; // nothing was ever drawn — nothing to go stale
+    const m = globalThis.mermaid;
+    if (!m || typeof m.render !== "function") return;
+    mermaidSvgCache.clear();
+    mermaidInFlight.clear();
+    initMermaid();
+    document.querySelectorAll('.mermaid-block[data-export-kind="mermaid"]').forEach((block) => {
+      const src = block.getAttribute("data-export-src") || "";
+      if (!src) return;
+      const id = "grok-mmd-" + (mermaidIdSeq++);
+      Promise.resolve()
+        .then(() => m.render(id, src))
+        .then((res) => {
+          const svg = (res && res.svg) || null;
+          mermaidSvgCache.set(src, svg);
+          if (svg) decorateMermaid(block, svg, src);
+        })
+        .catch(() => { mermaidSvgCache.set(src, null); });
+    });
+  }
+
+  function watchMermaidTheme() {
+    let lastLight = document.body.classList.contains("vscode-light");
+    const observer = new MutationObserver(() => {
+      const light = document.body.classList.contains("vscode-light");
+      if (light === lastLight) return;
+      lastLight = light;
+      retintMermaidDiagrams();
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
   }
 
   function mermaidSourceOf(block) {
@@ -916,6 +962,14 @@
     return `<code class="diff-code">${body}</code>`;
   }
 
+  // Renders a clicked-able numeric citation badge. `n` is already digits-only (regex-validated by
+  // the caller), so no HTML-escaping is needed. href="#" is inert — the click handler intercepts
+  // `.cite-marker` before the generic anchor handler ever sees it (see the messagesEl click
+  // listener below), so this never falls through to the openFile/openUrl branches.
+  function citeMarkerAnchor(n) {
+    return `<a href="#" class="cite-marker" data-cite-n="${n}" title="Open citation [${n}] in Robsky Viewer">[${n}]</a>`;
+  }
+
   function renderMarkdown(raw) {
     const codeBlocks = [];
     // Fence is 3+ backticks; the closing fence must be the SAME length (\1
@@ -990,6 +1044,19 @@
           }
           return `<code>${code}</code>`;
         })
+        // Robsky numeric citation markers (docs/NOTE-community-fork-cite-bridge.md) — kitchen's
+        // canonical `\u27e6N\u27e7`, its documented `[[N]]` ASCII fallback, and a bare `[N]` once
+        // rewritten for display. Deliberately NOT matched: `[[prov:...]]` and any other non-numeric
+        // bracket content (not part of kitchen's citation contract — left as inert literal text,
+        // same as today). The single combined regex avoids the double-bracket form being
+        // re-matched by the bare-`[N]` alt after the first pass renders it into an <a>. The bare
+        // `[N]` alt requires NOT being immediately followed by `(`, so a real markdown link whose
+        // text happens to be a number (e.g. `[1](https://...)`) still renders as a normal link by
+        // the very next replace below, unmolested.
+        .replace(
+          /\[\[(\d{1,4})\]\]|\u27e6(\d{1,4})\u27e7|\[(\d{1,4})\](?!\()/g,
+          (_, dbl, fw, bare) => citeMarkerAnchor(dbl || fw || bare),
+        )
         .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text, url) => {
           const safe = url.replace(/"/g, "&quot;");
           return `<a href="${safe}">${text}</a>`;
@@ -6802,6 +6869,7 @@
   };
   modeBtn.onclick = (e) => { e.stopPropagation(); if (state.busyLocked) return; openModePopover(); };
   gearBtn.onclick = (e) => { e.stopPropagation(); openGearPopover(); };
+  colorThemeBtn.onclick = (e) => { e.stopPropagation(); vscode.postMessage({ type: "selectColorTheme" }); };
 
   // Welcome screen's "about" link → open the gear popover's Version & about panel.
   const welcomeAboutLink = $("welcome-about-link");
@@ -6944,6 +7012,16 @@
       return;
     }
     closePopovers();
+    // Robsky citation badge (docs/NOTE-community-fork-cite-bridge.md) — checked before the
+    // generic `a[href]` branch below, since a cite marker IS an `<a href="#">` and would otherwise
+    // fall into the openFile branch (no `scheme:` prefix matches its file-path fallback regex).
+    const citeMarker = e.target.closest("a.cite-marker[data-cite-n]");
+    if (citeMarker) {
+      e.preventDefault();
+      const n = Number(citeMarker.dataset.citeN);
+      if (Number.isFinite(n)) vscode.postMessage({ type: "openCitation", n });
+      return;
+    }
     const a = e.target.closest("a[href]");
     if (!a) return;
     e.preventDefault();
@@ -7129,6 +7207,7 @@
   }
   applyChatZoom();
   initMermaid();
+  watchMermaidTheme();
   initMathJax();
   vscode.postMessage({ type: "ready" });
   reportRemotePreferences();
