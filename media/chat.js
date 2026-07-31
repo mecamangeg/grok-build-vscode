@@ -990,13 +990,26 @@
     return nums.includes(Number(n));
   }
 
+  // Tooltip must distinguish: no seal yet vs seal live but N ∉ sealed set.
+  // Grey mute is visual-only — clicks still post openCitation so the host can toast.
+  function citeMarkerTitle(n) {
+    if (citeMarkerIsLive(n)) {
+      return `Open citation [${n}] in Document Viewer`;
+    }
+    if (state.citationsLive) {
+      const nums = Array.isArray(state.citationSourceNumbers)
+        ? state.citationSourceNumbers.filter((x) => typeof x === "number" && Number.isFinite(x))
+        : [];
+      const sealedList = nums.length > 0 ? nums.join(", ") : "none";
+      return `Citation [${n}] is not in the sealed sources (sealed: ${sealedList}) — open Sources`;
+    }
+    return `Citation [${n}] opens after ALT AI seals a grounded turn — or open Sources`;
+  }
+
   function citeMarkerAnchor(n) {
     const live = citeMarkerIsLive(n);
-    const title = live
-      ? `Open citation [${n}] in Document Viewer`
-      : `Citation [${n}] opens after ALT AI seals a grounded turn — or open Sources`;
     const liveCls = live ? " cite-marker-live" : "";
-    return `<a href="#" class="cite-marker${liveCls}" data-cite-n="${n}" title="${title}">[${n}]</a>`;
+    return `<a href="#" class="cite-marker${liveCls}" data-cite-n="${n}" title="${citeMarkerTitle(n)}">[${n}]</a>`;
   }
 
   function applyCitationsLiveClass() {
@@ -1006,12 +1019,7 @@
       const n = el.getAttribute("data-cite-n");
       const live = citeMarkerIsLive(n);
       el.classList.toggle("cite-marker-live", live);
-      el.setAttribute(
-        "title",
-        live
-          ? `Open citation [${n}] in Document Viewer`
-          : `Citation [${n}] opens after ALT AI seals a grounded turn — or open Sources`,
-      );
+      el.setAttribute("title", citeMarkerTitle(n));
     }
   }
 
@@ -7065,8 +7073,9 @@
     if (citeMarker) {
       e.preventDefault();
       const n = Number(citeMarker.dataset.citeN);
-      // Fail closed: muted / out-of-seal indices never activate openCitation.
-      if (Number.isFinite(n) && citeMarkerIsLive(n)) {
+      // Always post — host re-probes and toasts for no-seal / N∉sealed set.
+      // Visual mute (cite-marker-live) stays fail-closed for affordance only.
+      if (Number.isFinite(n)) {
         vscode.postMessage({ type: "openCitation", n });
       }
       return;

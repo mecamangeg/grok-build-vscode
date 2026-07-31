@@ -4585,7 +4585,7 @@ See design doc for the full state machine diagram.`;
     if (!this.citationGateSourceNumbers.includes(n)) {
       const sealedList = this.citationGateSourceNumbers.join(", ");
       void vscode.window.showWarningMessage(
-        `ALT AI: citation [${n}] is not on the last sealed grounded turn (sealed cites: ${sealedList}). Open Sources for the sealed set.`,
+        `ALT AI: citation [${n}] is not in the sealed sources (sealed: ${sealedList}). Open Sources for the grounded set.`,
       );
       return;
     }
