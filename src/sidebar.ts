@@ -263,6 +263,9 @@ export class GrokSidebar implements vscode.WebviewViewProvider {
   /** UX-009 — poll Robsky `robsky.probeCitationGate` so chat markers track sealed+grounded. */
   private citationGateTimer?: ReturnType<typeof setInterval>;
   private static readonly CITATION_GATE_POLL_MS = 2000;
+  /** Last probe result — host-side click gate (never open N ∉ sourceNumbers). */
+  private citationGateLive = false;
+  private citationGateSourceNumbers: number[] = [];
   /** Guards {@link sweepEmptyPrimerSessions} to one run per activation. */
   private sweptEmptySessions = false;
   private output: vscode.OutputChannel;
@@ -4570,6 +4573,22 @@ See design doc for the full state machine diagram.`;
    */
   private async openRobskyCitation(n: number): Promise<void> {
     if (!Number.isFinite(n)) return;
+    // Re-probe immediately so New Session / late seal / Documents path split
+    // cannot leave a stale gate that opens the wrong toast.
+    await this.syncCitationGate();
+    if (!this.citationGateLive || this.citationGateSourceNumbers.length === 0) {
+      void vscode.window.showWarningMessage(
+        `ALT AI: citation [${n}] opens after a kitchen-sealed grounded turn — open Sources.`,
+      );
+      return;
+    }
+    if (!this.citationGateSourceNumbers.includes(n)) {
+      const sealedList = this.citationGateSourceNumbers.join(", ");
+      void vscode.window.showWarningMessage(
+        `ALT AI: citation [${n}] is not on the last sealed grounded turn (sealed cites: ${sealedList}). Open Sources for the sealed set.`,
+      );
+      return;
+    }
     try {
       const commands = await vscode.commands.getCommands(true);
       if (!commands.includes("robsky.openCitation")) {
@@ -4589,21 +4608,33 @@ See design doc for the full state machine diagram.`;
   /**
    * UX-009 — ask Robsky whether the current sealed-view is grounded with citations.
    * Cite-bridge never reads `.robsky/sealed-view.json` itself (Ownership B).
+   * Probe failure → mute ALL (fail closed). live + empty sourceNumbers → mute ALL.
    */
   private async syncCitationGate(): Promise<void> {
     let live = false;
+    let sourceNumbers: number[] = [];
     try {
       const commands = await vscode.commands.getCommands(true);
       if (commands.includes("robsky.probeCitationGate")) {
         const gate = (await vscode.commands.executeCommand("robsky.probeCitationGate")) as
-          | { live?: boolean }
+          | { live?: boolean; sourceNumbers?: number[] }
           | undefined;
         live = gate?.live === true;
+        if (live && Array.isArray(gate?.sourceNumbers)) {
+          sourceNumbers = gate.sourceNumbers.filter((n) => typeof n === "number" && Number.isFinite(n));
+        }
+        // Fail closed: "live" with no sealed indices must not unlock every marker.
+        if (live && sourceNumbers.length === 0) {
+          live = false;
+        }
       }
     } catch {
       live = false;
+      sourceNumbers = [];
     }
-    this.post({ type: "setCitationsLive", live });
+    this.citationGateLive = live;
+    this.citationGateSourceNumbers = sourceNumbers;
+    this.post({ type: "setCitationsLive", live, sourceNumbers });
   }
 
   /**

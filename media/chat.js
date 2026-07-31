@@ -139,6 +139,9 @@
     // flushes it (one combined prompt) when the session's turn ends.
     // UX-009 — sealed+grounded gate from Robsky probeCitationGate (default off).
     citationsLive: false,
+    // When live, only these sourceNumbers get the live affordance (sealed set).
+    // Empty sourceNumbers → mute ALL (fail closed; never treat as "all markers").
+    citationSourceNumbers: [],
     sendQueue: [],
     queuedWrapEl: null, // the .queued-msgs container pinned to the end of the chat
     // Steer (#52). Optimistic: `_x.ai/interject` is unadvertised, so we can't ask
@@ -977,13 +980,23 @@
   // Renders a numeric citation badge. `n` is already digits-only (regex-validated by the caller),
   // so no HTML-escaping is needed. href="#" is inert — the click handler intercepts `.cite-marker`
   // before the generic anchor handler ever sees it (see the messagesEl click listener below).
-  // UX-009: affordance is live only when host posts setCitationsLive (sealed+grounded); muted
-  // markers still click through so Robsky can toast Sources guidance.
+  // UX-009: affordance is live only when host posts setCitationsLive (sealed+grounded).
+  // Per-index: only sealed sourceNumbers are live. Empty list → mute ALL (fail closed).
+  // Muted markers do NOT post openCitation — host also re-gates before robsky.openCitation.
+  function citeMarkerIsLive(n) {
+    if (!state.citationsLive) return false;
+    const nums = state.citationSourceNumbers;
+    if (!Array.isArray(nums) || nums.length === 0) return false;
+    return nums.includes(Number(n));
+  }
+
   function citeMarkerAnchor(n) {
-    const title = state.citationsLive
+    const live = citeMarkerIsLive(n);
+    const title = live
       ? `Open citation [${n}] in Document Viewer`
       : `Citation [${n}] opens after ALT AI seals a grounded turn — or open Sources`;
-    return `<a href="#" class="cite-marker" data-cite-n="${n}" title="${title}">[${n}]</a>`;
+    const liveCls = live ? " cite-marker-live" : "";
+    return `<a href="#" class="cite-marker${liveCls}" data-cite-n="${n}" title="${title}">[${n}]</a>`;
   }
 
   function applyCitationsLiveClass() {
@@ -991,9 +1004,11 @@
     messagesEl.classList.toggle("citations-live", !!state.citationsLive);
     for (const el of messagesEl.querySelectorAll("a.cite-marker[data-cite-n]")) {
       const n = el.getAttribute("data-cite-n");
+      const live = citeMarkerIsLive(n);
+      el.classList.toggle("cite-marker-live", live);
       el.setAttribute(
         "title",
-        state.citationsLive
+        live
           ? `Open citation [${n}] in Document Viewer`
           : `Citation [${n}] opens after ALT AI seals a grounded turn — or open Sources`,
       );
@@ -6795,6 +6810,9 @@
         break;
       case "setCitationsLive":
         state.citationsLive = !!msg.live;
+        state.citationSourceNumbers = Array.isArray(msg.sourceNumbers)
+          ? msg.sourceNumbers.filter((n) => typeof n === "number" && Number.isFinite(n))
+          : [];
         applyCitationsLiveClass();
         break;
       case "onboarding":
@@ -7047,7 +7065,10 @@
     if (citeMarker) {
       e.preventDefault();
       const n = Number(citeMarker.dataset.citeN);
-      if (Number.isFinite(n)) vscode.postMessage({ type: "openCitation", n });
+      // Fail closed: muted / out-of-seal indices never activate openCitation.
+      if (Number.isFinite(n) && citeMarkerIsLive(n)) {
+        vscode.postMessage({ type: "openCitation", n });
+      }
       return;
     }
     const a = e.target.closest("a[href]");

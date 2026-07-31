@@ -55,8 +55,9 @@ describe("Robsky citation markers ([[n]] / \u27e6n\u27e7 / [n])", () => {
     expect(link!.textContent).toBe("1");
   });
 
-  it("clicking a citation badge posts openCitation with the numeric source number", () => {
+  it("clicking a live citation badge posts openCitation with the numeric source number", () => {
     const { el, window, posted } = renderAgent("First [[1]], then [[2]].");
+    dispatch(window, { type: "setCitationsLive", live: true, sourceNumbers: [1, 2] });
     const first = el.querySelector("a.cite-marker[data-cite-n=\"1\"]") as HTMLElement;
     const second = el.querySelector("a.cite-marker[data-cite-n=\"2\"]") as HTMLElement;
     expect(first).not.toBeNull();
@@ -72,8 +73,18 @@ describe("Robsky citation markers ([[n]] / \u27e6n\u27e7 / [n])", () => {
     ]);
   });
 
-  it("a badge click never falls through to openFile/openUrl (href=\"#\" is inert, not a file path)", () => {
+  it("muted / out-of-seal badges do not post openCitation (fail closed)", () => {
+    const { el, window, posted } = renderAgent("Sealed [[1]] vs chat [[10]].");
+    dispatch(window, { type: "setCitationsLive", live: true, sourceNumbers: [1] });
+    const ten = el.querySelector("a.cite-marker[data-cite-n=\"10\"]") as HTMLElement;
+    expect(ten).not.toBeNull();
+    click(window, ten);
+    expect(posted.filter((p: Posted) => p.type === "openCitation")).toEqual([]);
+  });
+
+  it("a live badge click never falls through to openFile/openUrl (href=\"#\" is inert, not a file path)", () => {
     const { el, window, posted } = renderAgent("[[5]]");
+    dispatch(window, { type: "setCitationsLive", live: true, sourceNumbers: [5] });
     const badge = el.querySelector("a.cite-marker[data-cite-n=\"5\"]") as HTMLElement;
     click(window, badge);
     expect(posted.some((p: Posted) => p.type === "openFile")).toBe(false);

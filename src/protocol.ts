@@ -120,8 +120,10 @@ export type HostMsg =
   | { type: "sessionContext" }
   | { type: "clearMessages" }
   // UX-009 — Robsky probeCitationGate result. When false, chat cite markers stay muted and
-  // clicks fail closed to Sources guidance (sealed+grounded only).
-  | { type: "setCitationsLive"; live: boolean }
+  // clicks fail closed (sealed+grounded only). sourceNumbers limits the live affordance to
+  // sealed indices (avoids [10] activating when the seal only has [1]/[2]). Empty list =
+  // mute ALL (fail closed).
+  | { type: "setCitationsLive"; live: boolean; sourceNumbers?: number[] }
   | { type: "onboarding"; state: "missing-cli" | "auth-required"; platform?: string }
   | { type: "error"; text: string }
   | { type: "xaiNotification"; update?: unknown }

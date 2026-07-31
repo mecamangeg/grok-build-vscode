@@ -127,7 +127,8 @@ a:hover {
 
 /* ALT AI numeric citation markers ([[n]] / bracket-n / [n]) — minimal badge on top of the
    shared `a`/`a:hover` link styling above (docs/NOTE-community-fork-cite-bridge.md).
-   UX-009: muted until host posts setCitationsLive (sealed+grounded). */
+   UX-009: muted until host posts setCitationsLive (sealed+grounded). Per-index
+   `.cite-marker-live` so [10] stays muted when the seal only has [1]/[2]. */
 a.cite-marker {
   font-weight: 600;
   padding: 0 3px;
@@ -137,12 +138,12 @@ a.cite-marker {
 a.cite-marker:hover {
   background: rgba(128, 128, 128, 0.28);
 }
-.messages:not(.citations-live) a.cite-marker {
+a.cite-marker:not(.cite-marker-live) {
   opacity: 0.65;
   cursor: help;
   text-decoration: none;
 }
-.messages:not(.citations-live) a.cite-marker:hover {
+a.cite-marker:not(.cite-marker-live):hover {
   background: rgba(128, 128, 128, 0.15);
 }
 
