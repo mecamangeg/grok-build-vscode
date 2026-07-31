@@ -266,6 +266,16 @@ export class GrokSidebar implements vscode.WebviewViewProvider {
   /** Last probe result — host-side click gate (never open N ∉ sourceNumbers). */
   private citationGateLive = false;
   private citationGateSourceNumbers: number[] = [];
+  /**
+   * Product-correct numbering (2.0.16) — turnId of the last seal the gate reported. A seal
+   * whose turnId DIFFERS from this while the window is open is a fresh seal landing for the
+   * turn the lawyer just ran, and its sealed `prose` is forwarded to the webview
+   * (applySealedProse) so the chat body swaps to the kitchen-sealed text. Baselined on the
+   * first probe after activation so a seal already on disk at startup never rewrites replayed
+   * history (that seal belongs to a prior window's turn).
+   */
+  private citationGateTurnId: string | undefined;
+  private citationGateBaselined = false;
   /** Guards {@link sweepEmptyPrimerSessions} to one run per activation. */
   private sweptEmptySessions = false;
   private output: vscode.OutputChannel;
@@ -4613,11 +4623,13 @@ See design doc for the full state machine diagram.`;
   private async syncCitationGate(): Promise<void> {
     let live = false;
     let sourceNumbers: number[] = [];
+    let turnId: string | undefined;
+    let prose: string | undefined;
     try {
       const commands = await vscode.commands.getCommands(true);
       if (commands.includes("robsky.probeCitationGate")) {
         const gate = (await vscode.commands.executeCommand("robsky.probeCitationGate")) as
-          | { live?: boolean; sourceNumbers?: number[] }
+          | { live?: boolean; sourceNumbers?: number[]; turnId?: string; prose?: string }
           | undefined;
         live = gate?.live === true;
         if (live && Array.isArray(gate?.sourceNumbers)) {
@@ -4627,6 +4639,10 @@ See design doc for the full state machine diagram.`;
         if (live && sourceNumbers.length === 0) {
           live = false;
         }
+        if (live) {
+          turnId = typeof gate?.turnId === "string" && gate.turnId ? gate.turnId : undefined;
+          prose = typeof gate?.prose === "string" && gate.prose.trim() ? gate.prose : undefined;
+        }
       }
     } catch {
       live = false;
@@ -4635,6 +4651,19 @@ See design doc for the full state machine diagram.`;
     this.citationGateLive = live;
     this.citationGateSourceNumbers = sourceNumbers;
     this.post({ type: "setCitationsLive", live, sourceNumbers });
+    // Product-correct numbering (2.0.16): a live seal with a turnId we have not seen in
+    // THIS window is a seal landing for the turn just run — forward the sealed prose so
+    // the webview swaps the assistant body (badge numbers then match sealed citations by
+    // construction). The first probe after activation only BASELINES the on-disk seal:
+    // a pre-existing seal must not rewrite replayed history from a prior window.
+    if (live && turnId && turnId !== this.citationGateTurnId) {
+      const freshSeal = this.citationGateBaselined;
+      this.citationGateTurnId = turnId;
+      if (freshSeal && prose) {
+        this.post({ type: "applySealedProse", prose, sourceNumbers, turnId });
+      }
+    }
+    this.citationGateBaselined = true;
   }
 
   /**

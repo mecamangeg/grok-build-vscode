@@ -148,6 +148,19 @@ a.cite-marker:not(.cite-marker-live):hover {
   background: rgba(128, 128, 128, 0.15);
 }
 
+/* Product-correct numbering (2.0.16): subtle inline notice atop an assistant body whose
+   text was swapped to the kitchen-sealed prose (the seal gate edited/renumbered it). */
+.sealed-swap-note {
+  font-size: 0.85em;
+  opacity: 0.75;
+  font-style: italic;
+  margin: 0 0 6px;
+  padding: 2px 6px;
+  border-left: 2px solid var(--vscode-textLink-foreground, #3794ff);
+  background: rgba(128, 128, 128, 0.08);
+  border-radius: 0 3px 3px 0;
+}
+
 /* ---- top bar ---- */
 
 .top-bar {

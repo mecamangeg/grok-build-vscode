@@ -268,6 +268,7 @@ export const OUTBOUND_DISPOSITION: Record<HostMsg["type"], OutboundDisposition> 
   sessionContext: "mirror",
   clearMessages: "mirror",
   setCitationsLive: "mirror",
+  applySealedProse: "mirror",
   onboarding: "mirror",
   error: "mirror",
   xaiNotification: "mirror",

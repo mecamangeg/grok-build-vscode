@@ -22,7 +22,7 @@
     "planHistoryQueue", "planProcessing", "toolCall", "toolCallUpdate", "permissionRequest",
     "permissionResolved", "exitPlanRequest", "planResolved", "questionRequest", "planNotice", "autoCompactNotice", "planBlocked",
     "promptComplete", "contextUsage", "commandOutput", "expandCommandOutputs", "setAllToolDetails", "focusInput", "restoreComposer", "truncateMessages", "uiConfirmRequest", "agentReset", "agentError", "agentEnd", "exit", "setBusy", "summarizing",
-    "sessionContext", "clearMessages", "onboarding", "error", "xaiNotification", "subagentUpdate", "runProgress", "sessions", "repos",
+    "sessionContext", "clearMessages", "setCitationsLive", "applySealedProse", "onboarding", "error", "xaiNotification", "subagentUpdate", "runProgress", "sessions", "repos",
     "sessionDot", "queuedSends", "steerUnavailable", "usage", "steerByDefault", "soundNotifications", "readRepliesAloud",
     "remoteStatus",
   ];

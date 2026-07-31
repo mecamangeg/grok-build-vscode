@@ -124,6 +124,14 @@ export type HostMsg =
   // sealed indices (avoids [10] activating when the seal only has [1]/[2]). Empty list =
   // mute ALL (fail closed).
   | { type: "setCitationsLive"; live: boolean; sourceNumbers?: number[] }
+  // Product-correct numbering (2.0.16) — the kitchen seal gate may rewrite the submitted
+  // answer (strip sentences, renumber citations compactly), so the CLI-authored prose in
+  // chat can carry [N] markers that silently point at the WRONG sealed passages. When a
+  // FRESH seal lands (probeCitationGate turnId changed while this window was open), the
+  // host forwards the sealed `prose` and the webview swaps the last assistant body to it —
+  // badge numbering then matches the sealed citations by construction, and any gate edits
+  // are visible to the lawyer instead of silently divergent.
+  | { type: "applySealedProse"; prose: string; sourceNumbers?: number[]; turnId?: string }
   | { type: "onboarding"; state: "missing-cli" | "auth-required"; platform?: string }
   | { type: "error"; text: string }
   | { type: "xaiNotification"; update?: unknown }
@@ -327,7 +335,7 @@ const HOST_MESSAGE_TYPE_MAP: Record<HostMsg["type"], true> = {
   permissionResolved: true, exitPlanRequest: true, planResolved: true, questionRequest: true,
   planNotice: true, autoCompactNotice: true, planBlocked: true, promptComplete: true, contextUsage: true, agentReset: true,
   agentError: true, agentEnd: true, exit: true, setBusy: true, summarizing: true,
-  sessionContext: true, clearMessages: true, setCitationsLive: true, onboarding: true, error: true,
+  sessionContext: true, clearMessages: true, setCitationsLive: true, applySealedProse: true, onboarding: true, error: true,
   xaiNotification: true, subagentUpdate: true, runProgress: true, commandOutput: true, expandCommandOutputs: true, steerByDefault: true,
   soundNotifications: true, readRepliesAloud: true, remoteStatus: true,
   setAllToolDetails: true, focusInput: true, restoreComposer: true, truncateMessages: true, uiConfirmRequest: true,

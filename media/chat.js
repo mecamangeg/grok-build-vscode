@@ -142,6 +142,10 @@
     // When live, only these sourceNumbers get the live affordance (sealed set).
     // Empty sourceNumbers → mute ALL (fail closed; never treat as "all markers").
     citationSourceNumbers: [],
+    // Product-correct numbering (2.0.16) — an applySealedProse that arrived while the
+    // turn was still streaming; applied at agentEnd (swapping a streaming body would be
+    // overwritten by the next flushAgent).
+    pendingSealedProse: null,
     sendQueue: [],
     queuedWrapEl: null, // the .queued-msgs container pinned to the end of the chat
     // Steer (#52). Optimistic: `_x.ai/interject` is unadvertised, so we can't ask
@@ -1021,6 +1025,74 @@
       el.classList.toggle("cite-marker-live", live);
       el.setAttribute("title", citeMarkerTitle(n));
     }
+  }
+
+  // ---- Product-correct numbering (2.0.16) ------------------------------------------------
+  // The kitchen seal gate may rewrite the submitted answer (strip sentences, renumber
+  // citations compactly — e.g. 12 sealed as 10, chat [6] ≠ sealed ⟦6⟧). The chat rendered
+  // the CLI-authored prose, so its [N] markers can silently resolve to the WRONG sealed
+  // passages. When the host reports a FRESH seal (applySealedProse), swap the last
+  // assistant body to the sealed prose: badge numbering then matches the sealed citations
+  // by construction, and any gate edits are visible to the lawyer instead of silent.
+
+  // Marker-style-insensitive compare: ⟦N⟧ / [[N]] / [N] are the same citation, and pure
+  // whitespace differences from prose round-tripping don't count as gate edits.
+  function normalizeProseForSealCompare(text) {
+    return String(text || "")
+      .replace(/\[\[(\d{1,4})\]\]|\u27e6(\d{1,4})\u27e7/g, (_, dbl, fw) => `[${dbl || fw}]`)
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function applySealedProseSwap(msg) {
+    const prose = typeof msg.prose === "string" ? msg.prose : "";
+    if (!prose.trim() || !messagesEl) return;
+    const bodies = messagesEl.querySelectorAll(".msg.agent > .body");
+    const body = bodies.length ? bodies[bodies.length - 1] : null;
+    if (!body) return;
+    // A seal can land minutes late (the poller waits on Cloud Run) — if the lawyer has
+    // moved on to a turn without citation markers, that body is NOT the sealed answer.
+    // Only a body that actually shows [N] markers is a swap candidate (fail closed).
+    if (!body.querySelector("a.cite-marker")) return;
+    const wrapper = body.parentElement;
+    const original =
+      state.activeAgentEl === body
+        ? state.activeAgentRaw
+        : (wrapper && wrapper._copyText) || body.textContent || "";
+    const differs =
+      normalizeProseForSealCompare(original) !== normalizeProseForSealCompare(prose);
+    // Adopt the sealed set from this payload — the swap must never render markers with a
+    // stale gate even if this message beats its setCitationsLive sibling.
+    if (Array.isArray(msg.sourceNumbers) && msg.sourceNumbers.length > 0) {
+      state.citationsLive = true;
+      state.citationSourceNumbers = msg.sourceNumbers.filter(
+        (n) => typeof n === "number" && Number.isFinite(n),
+      );
+    }
+    body.innerHTML = renderMarkdown(prose);
+    applyAutoDir(body);
+    renderMermaidIn(body);
+    if (differs) {
+      const count = Array.isArray(state.citationSourceNumbers)
+        ? state.citationSourceNumbers.length
+        : 0;
+      const note = document.createElement("div");
+      note.className = "sealed-swap-note";
+      note.textContent = `Showing the kitchen-sealed text (${count} citation${count === 1 ? "" : "s"})`;
+      body.insertBefore(note, body.firstChild);
+    }
+    // Copy button + any later flushAgent must reflect the sealed text, not the pre-seal draft.
+    if (wrapper) wrapper._copyText = prose;
+    if (state.activeAgentEl === body) state.activeAgentRaw = prose;
+    applyCitationsLiveClass();
+    scrollToBottom();
+  }
+
+  function applyPendingSealedProse() {
+    const pending = state.pendingSealedProse;
+    if (!pending) return;
+    state.pendingSealedProse = null;
+    applySealedProseSwap(pending);
   }
 
   function renderMarkdown(raw) {
@@ -2473,6 +2545,7 @@
       if (ver) { ver.classList.add("loading-dots"); ver.textContent = "Starting"; }
     }
     state.welcomeVisible = true;
+    state.pendingSealedProse = null; // a prior turn's late seal must not rewrite the new session
     state.pendingDiffByToolCallId.clear();
     state.toolItemsByToolCallId.clear();
     state.toolFailuresById.clear();
@@ -6741,6 +6814,8 @@
         updateSendButton();
         if (!state.replaying) maybeNotifySound("done"); // #59 — live turns only, and only when away
         speakCompletedTurn();
+        // A seal that landed mid-turn was deferred — the body is final now, swap it.
+        applyPendingSealedProse();
         break;
       case "exit":
         hideGrokking();
@@ -6822,6 +6897,15 @@
           ? msg.sourceNumbers.filter((n) => typeof n === "number" && Number.isFinite(n))
           : [];
         applyCitationsLiveClass();
+        break;
+      case "applySealedProse":
+        // Mid-turn seal (submit_answer sealed before the CLI finished narrating): defer to
+        // agentEnd — a swap now would be overwritten by the next flushAgent.
+        if (state.busy) {
+          state.pendingSealedProse = msg;
+        } else {
+          applySealedProseSwap(msg);
+        }
         break;
       case "onboarding":
         showOnboarding(msg.state, { platform: msg.platform });
