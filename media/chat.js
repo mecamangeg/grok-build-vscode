@@ -137,6 +137,8 @@
     // the host (queueSend/dequeueSend/clearQueuedSends) and come back as a
     // queuedSends snapshot, so the queue survives focus switches and the HOST
     // flushes it (one combined prompt) when the session's turn ends.
+    // UX-009 — sealed+grounded gate from Robsky probeCitationGate (default off).
+    citationsLive: false,
     sendQueue: [],
     queuedWrapEl: null, // the .queued-msgs container pinned to the end of the chat
     // Steer (#52). Optimistic: `_x.ai/interject` is unadvertised, so we can't ask
@@ -972,12 +974,30 @@
     return `<code class="diff-code">${body}</code>`;
   }
 
-  // Renders a clicked-able numeric citation badge. `n` is already digits-only (regex-validated by
-  // the caller), so no HTML-escaping is needed. href="#" is inert — the click handler intercepts
-  // `.cite-marker` before the generic anchor handler ever sees it (see the messagesEl click
-  // listener below), so this never falls through to the openFile/openUrl branches.
+  // Renders a numeric citation badge. `n` is already digits-only (regex-validated by the caller),
+  // so no HTML-escaping is needed. href="#" is inert — the click handler intercepts `.cite-marker`
+  // before the generic anchor handler ever sees it (see the messagesEl click listener below).
+  // UX-009: affordance is live only when host posts setCitationsLive (sealed+grounded); muted
+  // markers still click through so Robsky can toast Sources guidance.
   function citeMarkerAnchor(n) {
-    return `<a href="#" class="cite-marker" data-cite-n="${n}" title="Open citation [${n}] in Robsky Viewer">[${n}]</a>`;
+    const title = state.citationsLive
+      ? `Open citation [${n}] in Document Viewer`
+      : `Citation [${n}] opens after ALT AI seals a grounded turn — or open Sources`;
+    return `<a href="#" class="cite-marker" data-cite-n="${n}" title="${title}">[${n}]</a>`;
+  }
+
+  function applyCitationsLiveClass() {
+    if (!messagesEl) return;
+    messagesEl.classList.toggle("citations-live", !!state.citationsLive);
+    for (const el of messagesEl.querySelectorAll("a.cite-marker[data-cite-n]")) {
+      const n = el.getAttribute("data-cite-n");
+      el.setAttribute(
+        "title",
+        state.citationsLive
+          ? `Open citation [${n}] in Document Viewer`
+          : `Citation [${n}] opens after ALT AI seals a grounded turn — or open Sources`,
+      );
+    }
   }
 
   function renderMarkdown(raw) {
@@ -6772,6 +6792,10 @@
         break;
       case "clearMessages":
         resetForNewSession();
+        break;
+      case "setCitationsLive":
+        state.citationsLive = !!msg.live;
+        applyCitationsLiveClass();
         break;
       case "onboarding":
         showOnboarding(msg.state, { platform: msg.platform });

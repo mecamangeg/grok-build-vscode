@@ -1,15 +1,13 @@
-// View placement. The view is default-homed in the SECONDARY side bar
-// (`viewsContainers.secondarySidebar`, VS Code >= 1.106 — hence the engines
-// floor), with one extension-owned container contributed per dock location so
-// the gear-menu "Move view" items can move the view DIRECTLY via the internal
-// `vscode.moveViews` command (the one GitLens uses for its layout switch) — no
-// quickpick. This exists because Cursor's primary-side-bar context menu hides
-// the built-in "Move To" entry, and a one-click mover is useful everywhere.
+// View placement. ALT AI fork default-homes `grok.chat` in the PRIMARY side bar
+// (`viewsContainers.activitybar` / `grokPrimary`) so lawyer lockdown can hide the
+// Secondary Side Bar + Activity Bar icons without burying chat. Empty containers
+// remain as `vscode.moveViews` targets for gear-menu relocate. VS Code >= 1.106
+// (engines floor) still required for secondarySidebar contribution.
 
 export const GROK_VIEW_ID = "grok.chat";
 
 /** Contributed containers, one per dock location (package.json prefixes each id
- *  with `workbench.view.extension.`). `grokSidebar` homes the view; the other
+ *  with `workbench.view.extension.`). `grokPrimary` homes the view; the other
  *  two are empty by default (an empty container renders nothing) and exist only
  *  as `vscode.moveViews` targets. */
 export const SECONDARY_CONTAINER_ID = "workbench.view.extension.grokSidebar";

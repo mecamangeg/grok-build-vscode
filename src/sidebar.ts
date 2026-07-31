@@ -260,6 +260,9 @@ export class GrokSidebar implements vscode.WebviewViewProvider {
   // while keeping the one-shot scan bounded on a large store.
   private static readonly SWEEP_SCAN_LIMIT = 300;
   private reaper?: ReturnType<typeof setInterval>;
+  /** UX-009 — poll Robsky `robsky.probeCitationGate` so chat markers track sealed+grounded. */
+  private citationGateTimer?: ReturnType<typeof setInterval>;
+  private static readonly CITATION_GATE_POLL_MS = 2000;
   /** Guards {@link sweepEmptyPrimerSessions} to one run per activation. */
   private sweptEmptySessions = false;
   private output: vscode.OutputChannel;
@@ -375,6 +378,13 @@ export class GrokSidebar implements vscode.WebviewViewProvider {
     if (!this.reaper) {
       this.reaper = setInterval(() => this.reapPool(), GrokSidebar.REAP_INTERVAL_MS);
     }
+    if (!this.citationGateTimer) {
+      this.citationGateTimer = setInterval(
+        () => void this.syncCitationGate(),
+        GrokSidebar.CITATION_GATE_POLL_MS,
+      );
+    }
+    void this.syncCitationGate();
     // Re-tell the webview whether voice is set up when the relevant settings
     // change, so the mic button's "needs setup" hint updates without a reload.
     this.configWatcher?.dispose();
@@ -2168,6 +2178,10 @@ See design doc for the full state machine diagram.`;
 
   dispose(): void {
     if (this.reaper) { clearInterval(this.reaper); this.reaper = undefined; }
+    if (this.citationGateTimer) {
+      clearInterval(this.citationGateTimer);
+      this.citationGateTimer = undefined;
+    }
     this.uplink?.dispose();
     this.uplink = undefined;
     try { this.keepAwake.stop(); } catch { /* the pid watcher reaps it anyway */ }
@@ -4560,16 +4574,36 @@ See design doc for the full state machine diagram.`;
       const commands = await vscode.commands.getCommands(true);
       if (!commands.includes("robsky.openCitation")) {
         void vscode.window.showWarningMessage(
-          `Install the Robsky extension to open citation [${n}] in Viewer.`,
+          `ALT AI isn't ready to open citation [${n}] — open Sources after a grounded seal.`,
         );
         return;
       }
       await vscode.commands.executeCommand("robsky.openCitation", n);
     } catch (e) {
       void vscode.window.showWarningMessage(
-        `Robsky: couldn't open citation [${n}] (${e instanceof Error ? e.message : String(e)}).`,
+        `ALT AI: couldn't open citation [${n}] (${e instanceof Error ? e.message : String(e)}). Open Sources.`,
       );
     }
+  }
+
+  /**
+   * UX-009 — ask Robsky whether the current sealed-view is grounded with citations.
+   * Cite-bridge never reads `.robsky/sealed-view.json` itself (Ownership B).
+   */
+  private async syncCitationGate(): Promise<void> {
+    let live = false;
+    try {
+      const commands = await vscode.commands.getCommands(true);
+      if (commands.includes("robsky.probeCitationGate")) {
+        const gate = (await vscode.commands.executeCommand("robsky.probeCitationGate")) as
+          | { live?: boolean }
+          | undefined;
+        live = gate?.live === true;
+      }
+    } catch {
+      live = false;
+    }
+    this.post({ type: "setCitationsLive", live });
   }
 
   /**

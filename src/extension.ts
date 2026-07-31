@@ -18,9 +18,8 @@ export function activate(context: vscode.ExtensionContext): GrokExtensionApi {
     }),
     output,
     { dispose: () => sidebar.dispose() },
-    vscode.commands.registerCommand("grok.open", () =>
-      vscode.commands.executeCommand("workbench.view.extension.grokSidebar"),
-    ),
+    // ALT AI shell hides Secondary Side Bar — open/focus Primary (grokPrimary), not grokSidebar.
+    vscode.commands.registerCommand("grok.open", () => sidebar.dockChatPrimary()),
     vscode.commands.registerCommand("grok.newSession", () => sidebar.newSession()),
     vscode.commands.registerCommand("grok.newWorktreeSession", () => sidebar.newWorktreeSession()),
     vscode.commands.registerCommand("grok.applyWorktree", () => sidebar.applyFocusedWorktree()),
@@ -54,6 +53,12 @@ export function activate(context: vscode.ExtensionContext): GrokExtensionApi {
     // (Approve / Reject / Cancel flows) without a live CLI session.
     vscode.commands.registerCommand("grok._debugDummyPlan", () => sidebar.debugShowDummyPlan()),
   );
+
+  // Lawyer shell: Activity Bar + Secondary Side Bar are hidden, so onView:grok.chat never
+  // fires. onStartupFinished activates us; dock+focus makes ALT AI chat visible in Primary.
+  void sidebar.dockChatPrimary().catch(() => {
+    /* fail-soft — workbench may still be wiring view containers */
+  });
 
   // VS Code sets ExtensionMode.Test ONLY when the extension host was launched by
   // a test runner, so an installed build can never reach this branch and the

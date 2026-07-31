@@ -119,6 +119,9 @@ export type HostMsg =
   | { type: "summarizing" }
   | { type: "sessionContext" }
   | { type: "clearMessages" }
+  // UX-009 — Robsky probeCitationGate result. When false, chat cite markers stay muted and
+  // clicks fail closed to Sources guidance (sealed+grounded only).
+  | { type: "setCitationsLive"; live: boolean }
   | { type: "onboarding"; state: "missing-cli" | "auth-required"; platform?: string }
   | { type: "error"; text: string }
   | { type: "xaiNotification"; update?: unknown }
@@ -322,7 +325,7 @@ const HOST_MESSAGE_TYPE_MAP: Record<HostMsg["type"], true> = {
   permissionResolved: true, exitPlanRequest: true, planResolved: true, questionRequest: true,
   planNotice: true, autoCompactNotice: true, planBlocked: true, promptComplete: true, contextUsage: true, agentReset: true,
   agentError: true, agentEnd: true, exit: true, setBusy: true, summarizing: true,
-  sessionContext: true, clearMessages: true, onboarding: true, error: true,
+  sessionContext: true, clearMessages: true, setCitationsLive: true, onboarding: true, error: true,
   xaiNotification: true, subagentUpdate: true, runProgress: true, commandOutput: true, expandCommandOutputs: true, steerByDefault: true,
   soundNotifications: true, readRepliesAloud: true, remoteStatus: true,
   setAllToolDetails: true, focusInput: true, restoreComposer: true, truncateMessages: true, uiConfirmRequest: true,
